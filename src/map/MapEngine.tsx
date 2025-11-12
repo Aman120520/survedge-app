@@ -8,10 +8,14 @@
  * - Custom layer drawing: Full support for custom GeoJSON layers and annotations
  * - Smooth rendering: Hardware-accelerated rendering for survey features
  * - External device support: Real-time position updates from GNSS devices
+ * 
+ * IMPORTANT: Animations and followUserLocation are disabled during testing
+ * to ensure consistent behavior across devices. See mapConfig.ts
  */
 import React, { useRef, RefObject } from 'react';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { suppressMapLibreWarnings } from '../utils/performance';
+import { getAnimationDuration, shouldAnimate, MAP_CONFIG } from '../config/mapConfig';
 
 export interface MapEngineRef {
   getZoom: () => Promise<number | undefined>;
@@ -64,21 +68,23 @@ export const useMapEngine = () => {
     zoomLevel?: number;
     animationDuration?: number;
   }) => {
-    // Use smooth animation for better UX (default 300ms if not specified)
-    const smoothConfig = {
+    // Use configured animation duration (0 if animations disabled)
+    const cameraConfig = {
       ...config,
-      animationDuration: config.animationDuration ?? 300,
+      animationDuration: getAnimationDuration(config.animationDuration),
     };
-    cameraRef.current?.setCamera(smoothConfig);
+    cameraRef.current?.setCamera(cameraConfig);
   };
 
   const fitBounds = (
     southwest: [number, number],
     northeast: [number, number],
     padding: number = 50,
-    duration: number = 1000
+    duration?: number
   ) => {
-    cameraRef.current?.fitBounds(southwest, northeast, padding, duration);
+    // Use configured animation duration (0 if animations disabled)
+    const animationDuration = getAnimationDuration(duration);
+    cameraRef.current?.fitBounds(southwest, northeast, padding, animationDuration);
   };
 
   return {

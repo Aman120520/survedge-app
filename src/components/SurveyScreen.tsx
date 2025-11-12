@@ -47,6 +47,7 @@ import { processBatch } from '../utils/batchProcessor';
 import { useWindowDimensions } from 'react-native';
 import StakeoutBottomSheet from './StakeoutBottomSheet';
 import StakeoutCircularView from './StakeoutCircularView';
+import { MAP_CONFIG } from '../config/mapConfig';
 
 const mapStyle = require('../assets/style.json');
 
@@ -67,7 +68,7 @@ export default function SurveyScreen() {
   const [useExternalGnss, setUseExternalGnss] = useState(false);
   const [internalLocation, setInternalLocation] =
     useState<Location.LocationObject['coords'] | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(17);
+  const [zoomLevel, setZoomLevel] = useState(MAP_CONFIG.DEFAULT_ZOOM_LEVEL);
   const zoomLockRef = useRef(false);
 
   const [location, setLocation] = useState<{
@@ -113,7 +114,7 @@ export default function SurveyScreen() {
         watcher = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 1,
+            distanceInterval: MAP_CONFIG.LOCATION_UPDATE_INTERVAL,
           },
           (loc) => setInternalLocation(loc.coords)
         );
@@ -147,6 +148,7 @@ export default function SurveyScreen() {
   }, [internalLocation]);
 
   // Throttled camera update function for smooth performance
+  // Animation duration controlled by MAP_CONFIG (disabled during testing)
   const updateCameraPosition = React.useMemo(
     () =>
       throttle((lon: number, lat: number, zoom: number) => {
@@ -154,10 +156,10 @@ export default function SurveyScreen() {
           setCamera({
             centerCoordinate: [lon, lat],
             zoomLevel: zoom,
-            animationDuration: 300,
+            // animationDuration handled by mapConfig.ts
           });
         }
-      }, 300), // Update max every 300ms
+      }, MAP_CONFIG.CAMERA_UPDATE_THROTTLE_MS),
     []
   );
 
@@ -412,8 +414,8 @@ export default function SurveyScreen() {
         const clusterCoords = feature.geometry.coordinates as [number, number];
         setCamera({
           centerCoordinate: clusterCoords,
-          zoomLevel: Math.min(zoomLevel + 2, 24),
-          animationDuration: 300,
+          zoomLevel: Math.min(zoomLevel + 2, MAP_CONFIG.MAX_ZOOM_LEVEL),
+          // animationDuration handled by mapConfig.ts
         });
         return;
       }
@@ -447,12 +449,12 @@ export default function SurveyScreen() {
     const z = (await getZoom()) ?? zoomLevel;
     const center = await getCenter();
     if (!center) return;
-    const newZoom = Math.min((z ?? 16) + 1, 24);
+    const newZoom = Math.min((z ?? MAP_CONFIG.DEFAULT_ZOOM_LEVEL) + 1, MAP_CONFIG.MAX_ZOOM_LEVEL);
     setZoomLevel(newZoom);
     setCamera({ 
       zoomLevel: newZoom, 
       centerCoordinate: center,
-      animationDuration: 200 // Smooth zoom animation
+      // animationDuration handled by mapConfig.ts (disabled during testing)
     });
     setTimeout(() => (zoomLockRef.current = false), 300);
   };
@@ -462,12 +464,12 @@ export default function SurveyScreen() {
     const z = (await getZoom()) ?? zoomLevel;
     const center = await getCenter();
     if (!center) return;
-    const newZoom = Math.max((z ?? 16) - 1, 3);
+    const newZoom = Math.max((z ?? MAP_CONFIG.DEFAULT_ZOOM_LEVEL) - 1, MAP_CONFIG.MIN_ZOOM_LEVEL);
     setZoomLevel(newZoom);
     setCamera({ 
       zoomLevel: newZoom, 
       centerCoordinate: center,
-      animationDuration: 200 // Smooth zoom animation
+      // animationDuration handled by mapConfig.ts (disabled during testing)
     });
     setTimeout(() => (zoomLockRef.current = false), 300);
   };
@@ -554,10 +556,14 @@ export default function SurveyScreen() {
       });
 
       const [minX, minY, maxX, maxY] = bbox;
-      fitBounds([minX, minY], [maxX, maxY], 50, 800);
+      // fitBounds duration handled by mapConfig.ts (disabled during testing)
+      fitBounds([minX, minY], [maxX, maxY], 50);
 
-      await new Promise((resolve) => setTimeout(resolve, 850));
-      setCamera({ animationDuration: 0 });
+      // Small delay to ensure bounds are set (only needed if animations enabled)
+      if (MAP_CONFIG.ENABLE_ANIMATIONS) {
+        await new Promise((resolve) => setTimeout(resolve, 850));
+        setCamera({ animationDuration: 0 });
+      }
     } catch (e) {
       console.error('FocusAll error:', e);
     }
@@ -833,12 +839,12 @@ export default function SurveyScreen() {
         >
           <MapLibreGL.Camera
             ref={cameraRef}
-            defaultZoomLevel={18}
-            maxZoomLevel={24}
-            minZoomLevel={3}
-            animationMode="easeTo"
-            animationDuration={300}
-            followUserLocation={false}
+            defaultZoomLevel={MAP_CONFIG.DEFAULT_ZOOM_LEVEL}
+            maxZoomLevel={MAP_CONFIG.MAX_ZOOM_LEVEL}
+            minZoomLevel={MAP_CONFIG.MIN_ZOOM_LEVEL}
+            animationMode={MAP_CONFIG.ENABLE_ANIMATIONS ? "easeTo" : "none"}
+            animationDuration={MAP_CONFIG.ENABLE_ANIMATIONS ? MAP_CONFIG.DEFAULT_ANIMATION_DURATION : 0}
+            followUserLocation={MAP_CONFIG.FOLLOW_USER_LOCATION}
             zoomLevel={zoomLevel}
           />
 
