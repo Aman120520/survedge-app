@@ -48,6 +48,12 @@ import { useWindowDimensions } from 'react-native';
 import StakeoutBottomSheet from './StakeoutBottomSheet';
 import StakeoutCircularView from './StakeoutCircularView';
 import { MAP_CONFIG } from '../config/mapConfig';
+import { OptimizedMapRenderer } from 'expo-optimised-map-renderer';
+import {
+  convertPointsToNativeFormat,
+  calculateInitialRegion,
+  calculateRegionFromCenterAndZoom,
+} from '../utils/nativeRenderer';
 
 const mapStyle = require('../assets/style.json');
 
@@ -95,6 +101,7 @@ export default function SurveyScreen() {
   const [randLinesCount, setRandLinesCount] = useState('5');
   const [isLoading, setIsLoading] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [mapCenter, setMapCenter] = useState<[number, number] | undefined>(undefined);
   
   const { width, height } = useWindowDimensions();
   
@@ -104,6 +111,35 @@ export default function SurveyScreen() {
     points.forEach((p) => map.set(p.id, p));
     return map;
   }, [points]);
+
+  // Determine if we should use native renderer based on point count and config
+  const shouldUseNativeRenderer = useMemo(() => {
+    return (
+      MAP_CONFIG.USE_NATIVE_RENDERER &&
+      points.length >= MAP_CONFIG.NATIVE_RENDERER_THRESHOLD
+    );
+  }, [points.length]);
+
+  // Convert points to native format when using native renderer
+  const nativePoints = useMemo(() => {
+    if (!shouldUseNativeRenderer) return [];
+    return convertPointsToNativeFormat(points);
+  }, [points, shouldUseNativeRenderer]);
+
+  // Calculate initial region for native renderer
+  const nativeInitialRegion = useMemo(() => {
+    if (mapCenter) {
+      return calculateRegionFromCenterAndZoom(mapCenter, zoomLevel);
+    }
+    if (location) {
+      return calculateInitialRegion(
+        points,
+        location.latitude,
+        location.longitude
+      );
+    }
+    return calculateInitialRegion(points);
+  }, [mapCenter, zoomLevel, location, points]);
 
   // Request location permissions and watch position
   useEffect(() => {
@@ -828,8 +864,12 @@ export default function SurveyScreen() {
           onRegionDidChange={async () => {
             try {
               const z = await getZoom();
+              const center = await getCenter();
               if (typeof z === 'number' && !zoomLockRef.current) {
                 setZoomLevel(z);
+              }
+              if (center) {
+                setMapCenter(center);
               }
             } catch {}
           }}
@@ -866,49 +906,52 @@ export default function SurveyScreen() {
             />
           </MapLibreGL.ShapeSource>
 
-          <MapLibreGL.ShapeSource
-            id="pts"
-            shape={pointsGeoJSON}
-            onPress={onFeaturePress}
-            cluster={false}
-            clusterRadius={50}
-          >
-            <MapLibreGL.CircleLayer
-              id="pts-layer"
-              style={{
-                circleColor: '#fff',
-                circleRadius: 3,
-                circleStrokeColor: '#000',
-                circleStrokeWidth: 4,
-                circlePitchAlignment: 'map',
-              }}
-            />
+          {/* Conditionally render points: use native renderer for large datasets */}
+          {!shouldUseNativeRenderer ? (
+            <MapLibreGL.ShapeSource
+              id="pts"
+              shape={pointsGeoJSON}
+              onPress={onFeaturePress}
+              cluster={false}
+              clusterRadius={50}
+            >
+              <MapLibreGL.CircleLayer
+                id="pts-layer"
+                style={{
+                  circleColor: '#fff',
+                  circleRadius: 3,
+                  circleStrokeColor: '#000',
+                  circleStrokeWidth: 4,
+                  circlePitchAlignment: 'map',
+                }}
+              />
 
-            <MapLibreGL.SymbolLayer
-              id="pts-labels"
-              style={{
-                textField: ['concat', ['get', 'id'], '\n\n', ['get', 'code']],
-                textSize: [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  10,
-                  9,
-                  15,
-                  11,
-                  20,
-                  13,
-                ],
-                textHaloColor: '#fff',
-                textHaloWidth: 1.5,
-                textColor: '#111',
-                textOffset: [0, -0.02],
-                textAllowOverlap: false,
-                textIgnorePlacement: false,
-                textFont: ['Open Sans Regular', 'Arial Unicode MS Regular'],
-              }}
-            />
-          </MapLibreGL.ShapeSource>
+              <MapLibreGL.SymbolLayer
+                id="pts-labels"
+                style={{
+                  textField: ['concat', ['get', 'id'], '\n\n', ['get', 'code']],
+                  textSize: [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    10,
+                    9,
+                    15,
+                    11,
+                    20,
+                    13,
+                  ],
+                  textHaloColor: '#fff',
+                  textHaloWidth: 1.5,
+                  textColor: '#111',
+                  textOffset: [0, -0.02],
+                  textAllowOverlap: false,
+                  textIgnorePlacement: false,
+                  textFont: ['Open Sans Regular', 'Arial Unicode MS Regular'],
+                }}
+              />
+            </MapLibreGL.ShapeSource>
+          ) : null}
 
           {highlightGeoJSON && (
             <MapLibreGL.ShapeSource id="highlight" shape={highlightGeoJSON}>
@@ -987,6 +1030,46 @@ export default function SurveyScreen() {
             </MapLibreGL.ShapeSource>
           )}
         </MapLibreGL.MapView>
+
+        {/* Native Renderer Overlay for Large Point Datasets */}
+        {shouldUseNativeRenderer && nativePoints.length > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              pointerEvents: 'box-none', // Allow touches to pass through to MapLibre
+            }}
+          >
+            <OptimizedMapRenderer
+              points={nativePoints}
+              initialRegion={nativeInitialRegion}
+              style={{ flex: 1, backgroundColor: 'transparent' }}
+            />
+          </View>
+        )}
+
+        {/* Native Renderer Indicator */}
+        {shouldUseNativeRenderer && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 100,
+              left: 20,
+              backgroundColor: 'rgba(0, 123, 255, 0.9)',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 6,
+              elevation: 4,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
+              ⚡ Native Renderer: {points.length.toLocaleString()} points
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity style={styles.sourceBtn} onPress={toggleGnssSource}>
           <Ionicons

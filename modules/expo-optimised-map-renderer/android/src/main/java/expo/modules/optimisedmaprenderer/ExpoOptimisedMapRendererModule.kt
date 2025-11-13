@@ -2,7 +2,6 @@ package expo.modules.optimisedmaprenderer
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import java.net.URL
 
 class ExpoOptimisedMapRendererModule : Module() {
   // Each module class must implement the definition function. The definition consists of components
@@ -14,37 +13,21 @@ class ExpoOptimisedMapRendererModule : Module() {
     // The module will be accessible from `requireNativeModule('ExpoOptimisedMapRenderer')` in JavaScript.
     Name("ExpoOptimisedMapRenderer")
 
-    // Defines constant property on the module.
-    Constant("PI") {
-      Math.PI
-    }
-
-    // Defines event names that the module can send to JavaScript.
-    Events("onChange")
-
-    // Defines a JavaScript synchronous function that runs the native code on the JavaScript thread.
-    Function("hello") {
-      "Hello world! 👋"
-    }
-
-    // Defines a JavaScript function that always returns a Promise and whose native code
-    // is by default dispatched on the different thread than the JavaScript runtime runs on.
-    AsyncFunction("setValueAsync") { value: String ->
-      // Send an event to JavaScript.
-      sendEvent("onChange", mapOf(
-        "value" to value
-      ))
-    }
-
     // Enables the module to be used as a native view. Definition components that are accepted as part of
     // the view definition: Prop, Events.
     View(ExpoOptimisedMapRendererView::class) {
-      // Defines a setter for the `url` prop.
-      Prop("url") { view: ExpoOptimisedMapRendererView, url: URL ->
-        view.webView.loadUrl(url.toString())
+      // Defines a setter for the `points` prop.
+      // This prop receives an array of point objects from JavaScript and passes them to the native view
+      // for efficient rendering of 10,000+ points.
+      Prop("points") { view: ExpoOptimisedMapRendererView, points: List<Map<String, Any>> ->
+        view.setPoints(points)
       }
-      // Defines an event that the view can send to JavaScript.
-      Events("onLoad")
+      
+      // Defines a setter for the `initialRegion` prop.
+      // This prop sets the initial map region (center and zoom level).
+      Prop("initialRegion") { view: ExpoOptimisedMapRendererView, region: Map<String, Double> ->
+        view.setInitialRegion(region)
+      }
     }
   }
 }

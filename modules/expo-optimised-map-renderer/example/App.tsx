@@ -1,36 +1,42 @@
-import { useEvent } from 'expo';
-import ExpoOptimisedMapRenderer, { ExpoOptimisedMapRendererView } from 'expo-optimised-map-renderer';
-import { Button, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { OptimizedMapRenderer, MapPoint } from 'expo-optimised-map-renderer';
+import { SafeAreaView, ScrollView, Text, View, StyleSheet } from 'react-native';
+import { useState } from 'react';
+
+// Helper function to generate mock points
+const generateMockPoints = (count: number): MapPoint[] => {
+  const points: MapPoint[] = [];
+  const baseLat = 34.05;
+  const baseLon = -118.24;
+  for (let i = 0; i < count; i++) {
+    points.push({
+      id: `p${i}`,
+      latitude: baseLat + Math.random() * 0.1,
+      longitude: baseLon + Math.random() * 0.1,
+    });
+  }
+  return points;
+};
 
 export default function App() {
-  const onChangePayload = useEvent(ExpoOptimisedMapRenderer, 'onChange');
+  const [points] = useState(() => generateMockPoints(10000));
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.container}>
-        <Text style={styles.header}>Module API Example</Text>
-        <Group name="Constants">
-          <Text>{ExpoOptimisedMapRenderer.PI}</Text>
-        </Group>
-        <Group name="Functions">
-          <Text>{ExpoOptimisedMapRenderer.hello()}</Text>
-        </Group>
-        <Group name="Async functions">
-          <Button
-            title="Set value"
-            onPress={async () => {
-              await ExpoOptimisedMapRenderer.setValueAsync('Hello from JS!');
+        <Text style={styles.header}>Optimized Map Renderer Example</Text>
+        <Group name="Map View">
+          <Text style={styles.info}>
+            Rendering {points.length.toLocaleString()} points natively
+          </Text>
+          <OptimizedMapRenderer
+            points={points}
+            initialRegion={{
+              latitude: 34.09,
+              longitude: -118.29,
+              latitudeDelta: 0.2,
+              longitudeDelta: 0.2,
             }}
-          />
-        </Group>
-        <Group name="Events">
-          <Text>{onChangePayload?.value}</Text>
-        </Group>
-        <Group name="Views">
-          <ExpoOptimisedMapRendererView
-            url="https://www.example.com"
-            onLoad={({ nativeEvent: { url } }) => console.log(`Loaded: ${url}`)}
-            style={styles.view}
+            style={styles.map}
           />
         </Group>
       </ScrollView>
@@ -47,14 +53,16 @@ function Group(props: { name: string; children: React.ReactNode }) {
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   header: {
     fontSize: 30,
     margin: 20,
+    fontWeight: 'bold',
   },
   groupHeader: {
     fontSize: 20,
     marginBottom: 20,
+    fontWeight: '600',
   },
   group: {
     margin: 20,
@@ -66,8 +74,14 @@ const styles = {
     flex: 1,
     backgroundColor: '#eee',
   },
-  view: {
+  map: {
     flex: 1,
-    height: 200,
+    height: 400,
+    marginTop: 10,
   },
-};
+  info: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+});

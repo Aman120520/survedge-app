@@ -41,6 +41,11 @@ export const MAP_CONFIG = {
 
     // Debug Settings
     SUPPRESS_WARNINGS: true,
+
+    // Native Renderer Settings
+    // Use native renderer for large point datasets (10,000+ points)
+    USE_NATIVE_RENDERER: true,
+    NATIVE_RENDERER_THRESHOLD: 5000, // Switch to native renderer when points exceed this count
 } as const;
 
 /**
