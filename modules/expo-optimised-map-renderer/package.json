@@ -1,0 +1,43 @@
+{
+  "name": "expo-optimised-map-renderer",
+  "version": "0.1.0",
+  "description": "Native module to optimise the point mapping more then 10000",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint",
+    "test": "expo-module test",
+    "prepare": "expo-module prepare",
+    "prepublishOnly": "expo-module prepublishOnly",
+    "expo-module": "expo-module",
+    "open:ios": "xed example/ios",
+    "open:android": "open -a \"Android Studio\" example/android"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "expo-optimised-map-renderer",
+    "ExpoOptimisedMapRenderer"
+  ],
+  "repository": "https://github.com/Aman120520/expo-optimised-map-renderer",
+  "bugs": {
+    "url": "https://github.com/Aman120520/expo-optimised-map-renderer/issues"
+  },
+  "author": "Aman Vagadiya <amanvagadia12@gmail.com> (https://github.com/Aman120520)",
+  "license": "MIT",
+  "homepage": "https://github.com/Aman120520/expo-optimised-map-renderer#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "expo-module-scripts": "^5.0.7",
+    "expo": "^54.0.18",
+    "react-native": "0.81.5"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

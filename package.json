@@ -26,6 +26,7 @@
     "expo-image": "~2.0.0",
     "expo-linking": "~7.0.2",
     "expo-location": "~18.0.3",
+    "expo-optimised-map-renderer": "file:modules/expo-optimised-map-renderer",
     "expo-router": "~5.0.0",
     "expo-sharing": "~13.0.1",
     "expo-splash-screen": "~0.29.13",

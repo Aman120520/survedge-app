@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "expo-optimised-map-renderer": ["../src/index"],
+      "expo-optimised-map-renderer/*": ["../src/*"]
+    }
+  }
+}

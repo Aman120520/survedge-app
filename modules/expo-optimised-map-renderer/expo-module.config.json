@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["ExpoOptimisedMapRendererModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.optimisedmaprenderer.ExpoOptimisedMapRendererModule"]
+  }
+}
