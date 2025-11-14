@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GnssProvider } from '@/src/context/GnssContext';
 import { StakeoutProvider } from '@/src/context/StakeoutContext';
+import { SurveyDataProvider } from '@/src/context/SurveyDataContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -17,13 +18,18 @@ export default function RootLayout() {
   return (
     <GnssProvider>
       <StakeoutProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
+        <SurveyDataProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+              <Stack.Screen name="project-list" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="object-list" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="edit-point" options={{ presentation: 'modal', headerShown: false }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </SurveyDataProvider>
       </StakeoutProvider>
     </GnssProvider>
   );

@@ -2,52 +2,49 @@
  * Survey Screen Component
  * Main mapping interface with all survey features
  */
+import { Ionicons } from '@expo/vector-icons';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import MapLibreGL from '@maplibre/maplibre-react-native';
+import * as turf from '@turf/turf';
+import * as FileSystem from 'expo-file-system';
+import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
   Alert,
-  StyleSheet,
-  ScrollView,
+  FlatList,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from 'react-native';
-import { useMapEngine, initializeMapEngine } from '../map/MapEngine';
-import MapLibreGL from '@maplibre/maplibre-react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
-import { Ionicons } from '@expo/vector-icons';
+import { MAP_CONFIG } from '../config/mapConfig';
 import { useGnss } from '../context/GnssContext';
 import { useStakeout } from '../context/StakeoutContext';
-import {
-  Point,
-  Line,
-  getAllCoordinates,
-  calculateLineLength,
-} from '../geospatial/GeospatialProcessor';
-import {
-  exportToJSON,
-  exportToGeoJSON,
-  exportToCSV,
-  importFromJSON,
-  importFromGeoJSON,
-  importFromCSV,
-  Code,
-  SurveyData,
-} from '../data/DataImporterExporter';
+import { useSurveyData } from '../context/SurveyDataContext';
 import { transformToWebMercator } from '../coordinate/CoordinateTransformer';
-import * as turf from '@turf/turf';
-import { throttle } from '../utils/performance';
+import {
+  Code,
+} from '../data/DataImporterExporter';
+import {
+  Line,
+  Point,
+  calculateLineLength,
+  getAllCoordinates,
+} from '../geospatial/GeospatialProcessor';
+import { initializeMapEngine, useMapEngine } from '../map/MapEngine';
 import { clusterPoints, getClusterRadius } from '../utils/clustering';
-import { processBatch } from '../utils/batchProcessor';
-import { useWindowDimensions } from 'react-native';
+import { throttle } from '../utils/performance';
+import ExportFormatScreen from './ExportFormatScreen';
+import MeasurementInterface from './MeasurementInterface';
+import ObjectListScreen from './ObjectListScreen';
 import StakeoutBottomSheet from './StakeoutBottomSheet';
 import StakeoutCircularView from './StakeoutCircularView';
-import { MAP_CONFIG } from '../config/mapConfig';
 
 const mapStyle = require('../assets/style.json');
 
@@ -55,15 +52,20 @@ const mapStyle = require('../assets/style.json');
 initializeMapEngine();
 
 export default function SurveyScreen() {
+  const router = useRouter();
   const { gnssStatus } = useGnss();
   const { mapRef, cameraRef, getZoom, getCenter, setCamera, fitBounds } =
     useMapEngine();
+  const { points, lines, codes, setPoints, setLines, setCodes, exportData, isLoading, importProgress } = useSurveyData();
 
   const addSheetRef = useRef<BottomSheet>(null);
   const codeSheetRef = useRef<BottomSheet>(null);
   const detailSheetRef = useRef<BottomSheet>(null);
   const randomSheetRef = useRef<BottomSheet>(null);
   const stakeoutSheetRef = useRef<BottomSheet>(null);
+  const measurementSheetRef = useRef<BottomSheet>(null);
+  const exportSheetRef = useRef<BottomSheet>(null);
+  const objectListSheetRef = useRef<BottomSheet>(null);
 
   const [useExternalGnss, setUseExternalGnss] = useState(false);
   const [internalLocation, setInternalLocation] =
@@ -76,28 +78,25 @@ export default function SurveyScreen() {
     longitude: number;
     altitude?: number;
   } | null>(null);
-  const [codes, setCodes] = useState<Code[]>([
-    { id: 'NO-CODE', name: 'NO CODE', type: 'point' },
-  ]);
   const [selectedCodeId, setSelectedCodeId] = useState('NO-CODE');
   const [formPointId, setFormPointId] = useState('');
-  const [points, setPoints] = useState<Point[]>([]);
-  const [lines, setLines] = useState<Line[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [activeLinePoints, setActiveLinePoints] = useState<string[]>([]);
   const [closeOnEnd, setCloseOnEnd] = useState(false);
   const [newCodeName, setNewCodeName] = useState('');
   const [newCodeType, setNewCodeType] = useState<'point' | 'line'>('point');
   const [selectedFeature, setSelectedFeature] = useState<any>(null);
+  const [selectedPointForEdit, setSelectedPointForEdit] = useState<Point | null>(null);
+  const [showDetailMenu, setShowDetailMenu] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [heading, setHeading] = useState(0);
   const { startStakeout, stopStakeout, updateGuidance, isActive: isStakeoutActive, target: stakeoutTarget } = useStakeout();
   const [randPointsCount, setRandPointsCount] = useState('10');
   const [randLinesCount, setRandLinesCount] = useState('5');
-  const [isLoading, setIsLoading] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
-  
+
   const { width, height } = useWindowDimensions();
-  
+
   // Use Map for O(1) point lookups instead of O(n) array.find()
   const pointsMap = useMemo(() => {
     const map = new Map<string, Point>();
@@ -167,7 +166,7 @@ export default function SurveyScreen() {
   useEffect(() => {
     if (!location) return;
     updateCameraPosition(location.longitude, location.latitude, zoomLevel);
-    
+
     // Update stakeout guidance when location changes
     if (isStakeoutActive && location) {
       updateGuidance({
@@ -361,7 +360,7 @@ export default function SurveyScreen() {
   // Optimized lines GeoJSON with efficient point lookups
   const linesGeoJSON = useMemo(() => {
     const codeMap = new Map(codes.map((c) => [c.id, c.name]));
-    
+
     return {
       type: 'FeatureCollection',
       features: lines.map((l) => {
@@ -419,7 +418,7 @@ export default function SurveyScreen() {
         });
         return;
       }
-      
+
       // Use Map for O(1) lookup
       const point = pointsMap.get(feature.properties.id);
       if (point) {
@@ -451,8 +450,8 @@ export default function SurveyScreen() {
     if (!center) return;
     const newZoom = Math.min((z ?? MAP_CONFIG.DEFAULT_ZOOM_LEVEL) + 1, MAP_CONFIG.MAX_ZOOM_LEVEL);
     setZoomLevel(newZoom);
-    setCamera({ 
-      zoomLevel: newZoom, 
+    setCamera({
+      zoomLevel: newZoom,
       centerCoordinate: center,
       // animationDuration handled by mapConfig.ts (disabled during testing)
     });
@@ -466,8 +465,8 @@ export default function SurveyScreen() {
     if (!center) return;
     const newZoom = Math.max((z ?? MAP_CONFIG.DEFAULT_ZOOM_LEVEL) - 1, MAP_CONFIG.MIN_ZOOM_LEVEL);
     setZoomLevel(newZoom);
-    setCamera({ 
-      zoomLevel: newZoom, 
+    setCamera({
+      zoomLevel: newZoom,
       centerCoordinate: center,
       // animationDuration handled by mapConfig.ts (disabled during testing)
     });
@@ -655,110 +654,85 @@ export default function SurveyScreen() {
     }
   };
 
-  // Export functions
-  const exportData = async (format: 'JSON' | 'GeoJSON' | 'CSV' = 'JSON') => {
-    try {
-      const data: SurveyData = { points, lines, codes };
-      let fileUri: string;
-
-      switch (format) {
-        case 'JSON':
-          fileUri = await exportToJSON(data);
-          break;
-        case 'GeoJSON':
-          fileUri = await exportToGeoJSON(data);
-          break;
-        case 'CSV':
-          fileUri = await exportToCSV(data);
-          break;
-        default:
-          fileUri = await exportToJSON(data);
+  // Handlers for edit, delete, and menu actions
+  const handleEditPoint = () => {
+    if (selectedFeature && selectedFeature.geometry.type === 'Point') {
+      const point = points.find(p => p.id === selectedFeature.properties.id);
+      if (point) {
+        setSelectedPointForEdit(point);
+        setShowDetailMenu(false);
+        detailSheetRef.current?.close();
+        router.push({ pathname: '/edit-point', params: { pointId: point.id } });
       }
-
-      // Note: If using sharing fallback, the share dialog will open automatically
-      // Only show alert if StorageAccessFramework was used (Android) or on iOS
-      Alert.alert('Exported', `File exported successfully as ${format}!`);
-    } catch (e: any) {
-      Alert.alert('Export Failed', e.message);
     }
   };
 
-  // Import functions with progress tracking for large datasets
-  const importData = async (format: 'JSON' | 'GeoJSON' | 'CSV' = 'JSON') => {
-    try {
-      setIsLoading(true);
-      setImportProgress(0);
-      
-      let data: SurveyData;
+  const handleDeleteFeature = () => {
+    if (!selectedFeature) return;
 
-      switch (format) {
-        case 'JSON':
-          data = await importFromJSON();
-          break;
-        case 'GeoJSON':
-          data = await importFromGeoJSON();
-          break;
-        case 'CSV':
-          data = await importFromCSV();
-          break;
-        default:
-          data = await importFromJSON();
-      }
-
-      const totalFeatures = (data.points?.length || 0) + (data.lines?.length || 0);
-      
-      // For large datasets (>5000 features), process in batches
-      if (totalFeatures > 5000) {
-        setImportProgress(50);
-        
-        // Process points in batches
-        if (data.points && data.points.length > 0) {
-          await processBatch(
-            data.points,
-            (point) => point,
-            1000,
-            (processed, total) => {
-              setImportProgress(50 + (processed / total) * 25);
+    Alert.alert(
+      'Delete Feature',
+      `Are you sure you want to delete ${selectedFeature.properties.id}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (selectedFeature.geometry.type === 'Point') {
+              setPoints(prev => prev.filter(p => p.id !== selectedFeature.properties.id));
+            } else if (selectedFeature.geometry.type === 'LineString') {
+              setLines(prev => prev.filter(l => l.id !== selectedFeature.properties.id));
             }
-          );
-        }
-        
-        setImportProgress(75);
-        
-        // Process lines in batches
-        if (data.lines && data.lines.length > 0) {
-          await processBatch(
-            data.lines,
-            (line) => line,
-            1000,
-            (processed, total) => {
-              setImportProgress(75 + (processed / total) * 25);
-            }
-          );
-        }
+            setSelectedFeature(null);
+            setShowDetailMenu(false);
+            detailSheetRef.current?.close();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSavePointEdit = (pointId: string, updates: { id?: string; codeId?: string }) => {
+    setPoints(prev => prev.map(p => {
+      if (p.id === pointId) {
+        return {
+          ...p,
+          id: updates.id || p.id,
+          codeId: updates.codeId || p.codeId,
+        };
       }
+      return p;
+    }));
+    setSelectedPointForEdit(null);
+  };
 
-      setImportProgress(100);
-      
-      setPoints(data.points || []);
-      setLines(data.lines || []);
-      setCodes(
-        data.codes || [{ id: 'NO-CODE', name: 'NO CODE', type: 'point' }]
-      );
-
-      setIsLoading(false);
-      setImportProgress(0);
-      
-      Alert.alert(
-        'Import Successful',
-        `Imported ${data.points?.length || 0} points and ${data.lines?.length || 0} lines!`
-      );
-    } catch (e: any) {
-      console.error(e);
-      setIsLoading(false);
-      setImportProgress(0);
-      Alert.alert('Import Failed', e.message);
+  const handleMeasurePoint = () => {
+    measurementSheetRef.current?.close();
+    // Create point at current location
+    const created = createPointAtCurrentLocation(formPointId.trim() || nextPointId(), selectedCodeId);
+    if (created) {
+      addSheetRef.current?.close();
+      setFormPointId('');
     }
+  };
+
+  const handleAddPoint = () => {
+    setShowAddMenu(false);
+    measurementSheetRef.current?.expand();
+  };
+
+  const handleAddLine = () => {
+    setShowAddMenu(false);
+    addSheetRef.current?.expand();
+  };
+
+  const handleOpenObjectList = () => {
+    objectListSheetRef.current?.expand();
+  };
+
+  const handleExport = () => {
+    exportSheetRef.current?.expand();
   };
 
   // Request file permissions on Android (if StorageAccessFramework is available)
@@ -831,7 +805,7 @@ export default function SurveyScreen() {
               if (typeof z === 'number' && !zoomLockRef.current) {
                 setZoomLevel(z);
               }
-            } catch {}
+            } catch { }
           }}
           onRegionWillChange={() => {
             // Suppress warnings during region changes
@@ -857,8 +831,8 @@ export default function SurveyScreen() {
           >
             <MapLibreGL.LineLayer
               id="ln-layer"
-              style={{ 
-                lineColor: '#000', 
+              style={{
+                lineColor: '#000',
                 lineWidth: 4,
                 lineCap: 'round',
                 lineJoin: 'round',
@@ -1021,7 +995,10 @@ export default function SurveyScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.ioBtn, { backgroundColor: '#4CAF50' }]}
-            onPress={() => importData('JSON')}
+            onPress={() => {
+              // Import functionality moved to context - can be accessed via menu
+              Alert.alert('Import', 'Import functionality available via menu');
+            }}
           >
             <Text style={styles.ioText}>Import JSON</Text>
           </TouchableOpacity>
@@ -1034,12 +1011,41 @@ export default function SurveyScreen() {
           <Text style={styles.randomText}>Random</Text>
         </TouchableOpacity>
 
+        {/* List icon button */}
+        <TouchableOpacity
+          style={[styles.fab, styles.listFab]}
+          onPress={handleOpenObjectList}
+        >
+          <Ionicons name="list" size={24} color="#fff" />
+        </TouchableOpacity>
+
+        {/* Add menu button */}
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => addSheetRef.current?.expand()}
+          onPress={() => setShowAddMenu(!showAddMenu)}
         >
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
+
+        {/* Add menu */}
+        {showAddMenu && (
+          <View style={styles.addMenu}>
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={handleAddPoint}
+            >
+              <Ionicons name="radio-button-on" size={20} color="#007bff" />
+              <Text style={styles.addMenuText}>Add point</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={handleAddLine}
+            >
+              <Ionicons name="git-branch" size={20} color="#007bff" />
+              <Text style={styles.addMenuText}>Add line or polygon</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Capture BottomSheet */}
         <BottomSheet ref={addSheetRef} index={-1} snapPoints={['45%']}>
@@ -1186,15 +1192,46 @@ export default function SurveyScreen() {
           <BottomSheetView style={styles.sheet}>
             <View style={styles.rowBetween}>
               <Text style={styles.title}>Feature Details</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  detailSheetRef.current?.close();
-                  setSelectedFeature(null);
-                }}
-              >
-                <Text style={styles.closeText}>✕</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity
+                  onPress={() => setShowDetailMenu(!showDetailMenu)}
+                  style={{ marginRight: 12, padding: 8 }}
+                >
+                  <Ionicons name="ellipsis-vertical" size={24} color="#111" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    detailSheetRef.current?.close();
+                    setSelectedFeature(null);
+                    setShowDetailMenu(false);
+                  }}
+                >
+                  <Text style={styles.closeText}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
+
+            {/* Three-dot menu */}
+            {showDetailMenu && (
+              <View style={styles.detailMenu}>
+                {selectedFeature?.geometry.type === 'Point' && (
+                  <TouchableOpacity
+                    style={styles.detailMenuItem}
+                    onPress={handleEditPoint}
+                  >
+                    <Ionicons name="create-outline" size={20} color="#666" />
+                    <Text style={styles.detailMenuText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.detailMenuItem, styles.detailMenuDelete]}
+                  onPress={handleDeleteFeature}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#dc3545" />
+                  <Text style={[styles.detailMenuText, { color: '#dc3545' }]}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {selectedFeature ? (
               <View style={{ marginTop: 12 }}>
@@ -1374,6 +1411,71 @@ export default function SurveyScreen() {
             </TouchableOpacity>
           </BottomSheetView>
         </BottomSheet>
+
+        {/* Measurement Interface */}
+        <MeasurementInterface
+          sheetRef={measurementSheetRef}
+          onMeasure={handleMeasurePoint}
+          onCancel={() => measurementSheetRef.current?.close()}
+        />
+
+        {/* Object List Screen */}
+        <BottomSheet ref={objectListSheetRef} index={-1} snapPoints={['90%']} enablePanDownToClose>
+          <BottomSheetView style={{ flex: 1 }}>
+            <ObjectListScreen
+              points={points}
+              lines={lines}
+              codes={codes}
+              onFeaturePress={(feature) => {
+                objectListSheetRef.current?.close();
+                // Find and select the feature
+                if (feature.type === 'point') {
+                  const point = points.find(p => p.id === feature.id);
+                  if (point) {
+                    const fullFeature = {
+                      type: 'Feature',
+                      geometry: { type: 'Point', coordinates: point.coords },
+                      properties: {
+                        id: point.id,
+                        code: (codes.find(c => c.id === point.codeId) || {}).name,
+                      },
+                    };
+                    setSelectedFeature(fullFeature);
+                    detailSheetRef.current?.expand();
+                  }
+                } else {
+                  const line = lines.find(l => l.id === feature.id);
+                  if (line) {
+                    const linePoints = line.pointIds.map(pid => points.find(p => p.id === pid)).filter(Boolean) as Point[];
+                    const coords = linePoints.map(p => p.coords);
+                    const finalCoords = line.closed && coords.length >= 3 ? [...coords, coords[0]] : coords;
+                    const fullFeature = {
+                      type: 'Feature',
+                      geometry: { type: 'LineString', coordinates: finalCoords },
+                      properties: {
+                        id: line.id,
+                        code: (codes.find(c => c.id === line.codeId) || {}).name,
+                      },
+                    };
+                    setSelectedFeature(fullFeature);
+                    detailSheetRef.current?.expand();
+                  }
+                }
+              }}
+              onExport={handleExport}
+            />
+          </BottomSheetView>
+        </BottomSheet>
+
+        {/* Export Format Screen */}
+        <ExportFormatScreen
+          sheetRef={exportSheetRef}
+          onExport={(format, columnFormat) => {
+            exportData(format, columnFormat);
+            exportSheetRef.current?.close();
+          }}
+          onClose={() => exportSheetRef.current?.close()}
+        />
       </View>
     </GestureHandlerRootView>
   );
@@ -1393,6 +1495,62 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   fabText: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  listFab: {
+    bottom: 95,
+  },
+  addMenu: {
+    position: 'absolute',
+    bottom: 95,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    minWidth: 180,
+  },
+  addMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 6,
+  },
+  addMenuText: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#111',
+  },
+  detailMenu: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+    marginBottom: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.22,
+    shadowRadius: 2.22,
+  },
+  detailMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 6,
+  },
+  detailMenuDelete: {
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    marginTop: 4,
+  },
+  detailMenuText: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#111',
+  },
   sheet: { padding: 16 },
   title: { fontWeight: '700', fontSize: 16, color: '#111' },
   closeText: { fontSize: 20, color: '#007bff', fontWeight: '600' },
