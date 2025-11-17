@@ -16,28 +16,29 @@ export const MAP_CONFIG = {
     // Animation Settings
     // Set to false during testing/development to avoid inconsistent behavior
     // Enable only after stability is verified on multiple devices
-    ENABLE_ANIMATIONS: false, // TODO: Set to true after stability verification
+    ENABLE_ANIMATIONS: true, // Enabled for smooth real-time tracking
 
-    // Default animation duration (ms) - only used if ENABLE_ANIMATIONS is true
-    DEFAULT_ANIMATION_DURATION: 300,
+    // Default animation duration (ms) - shorter for smoother real-time updates
+    DEFAULT_ANIMATION_DURATION: 150, // Reduced for smoother real-time tracking
 
     // Camera Settings
     // Disable followUserLocation during testing to prevent camera conflicts
     // This can cause inconsistent zoomLevel behavior across devices
-    FOLLOW_USER_LOCATION: false, // TODO: Set to true after stability verification
+    FOLLOW_USER_LOCATION: true, // TODO: Set to true after stability verification
 
     // Map Settings
-    DEFAULT_ZOOM_LEVEL: 17,
-    MIN_ZOOM_LEVEL: 3,
-    MAX_ZOOM_LEVEL: 24,
+    DEFAULT_ZOOM_LEVEL: 14,
+    MIN_ZOOM_LEVEL: 0,
+    MAX_ZOOM_LEVEL: 18, // Reduced from 24 - most tile providers support up to zoom 18-19
+    // Higher zoom levels (19+) may show blank tiles as tiles are not available
 
     // Location Update Settings
-    LOCATION_UPDATE_INTERVAL: 1000, // ms
+    LOCATION_UPDATE_INTERVAL: 0, // 0 = update on every movement (real-time)
     // Note: Location.Accuracy is an enum, use Location.Accuracy.BestForNavigation directly
 
     // Performance Settings
     THROTTLE_CAMERA_UPDATES: true,
-    CAMERA_UPDATE_THROTTLE_MS: 300,
+    CAMERA_UPDATE_THROTTLE_MS: 50, // Reduced to 50ms for ultra-smooth real-time tracking
 
     // Debug Settings
     SUPPRESS_WARNINGS: true,
